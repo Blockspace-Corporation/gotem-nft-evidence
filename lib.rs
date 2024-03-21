@@ -91,7 +91,7 @@ pub mod evidence {
 
         #[ink(message)]
         pub fn set_evidence(&mut self, evidence: EvidenceNFT) {
-            let length = (self.evidence.len() as u32).checked_add(1).unwrap();
+            let length: Id = (self.evidence.len() as Id).checked_add(1).unwrap();
             self.evidence.insert(length, evidence);
         }
 
@@ -106,7 +106,7 @@ pub mod evidence {
 
         #[ink(message)]
         pub fn update_evidence(&mut self, evidence_id: Id, new_evidence: EvidenceNFT) -> Result<(), Error> {
-            let evidence = self
+            let evidence: &mut EvidenceNFT = self
                 .evidence
                 .get_mut(&evidence_id)
                 .ok_or(Error::EvidenceNotFound)?;
@@ -117,8 +117,8 @@ pub mod evidence {
         #[ink(message)]
         pub fn get_evidence_by_id(&self, evidence_id: Id) -> Option<EvidenceNFTOutput> {
             if let Some(evidence) = self.evidence.get(&evidence_id) {
-                let case_title = self.case.get_case_title(evidence.case_id);
-                let evidence = EvidenceNFTOutput::get_evidence(evidence_id, case_title, evidence);
+                let case_title: Option<String> = self.case.get_case_title(evidence.case_id);
+                let evidence: EvidenceNFTOutput = EvidenceNFTOutput::get_evidence(evidence_id, case_title, evidence);
                 Some(evidence)
             } else {
                 None
