@@ -7,6 +7,7 @@ pub use self::evidence::{
 
 #[ink::contract]
 pub mod evidence {
+    use case::CaseRef;
     use ink_prelude:: {
         string::String,
         vec::Vec,
@@ -17,11 +18,12 @@ pub mod evidence {
         Encode,
     };
 
-    pub type EvidenceId = u32;
+    pub type Id = u32;
 
     #[ink(storage)]
     pub struct Evidence {
-        pub evidence: BTreeMap<EvidenceId, EvidenceNFT>,
+        pub evidence: BTreeMap<Id, EvidenceNFT>,
+        pub case: CaseRef,
     }
 
     #[derive(Encode, Decode, Debug)]
@@ -34,6 +36,18 @@ pub mod evidence {
         status: Status,
     }
 
+    #[derive(Encode, Decode, Debug)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct EvidenceNFTOutput {
+        pub evidence_id: Id,
+        pub description: String,
+        pub owner: AccountId,
+        pub file: Hash,
+        pub case_id: u32,
+        pub case_title: Option<String>,
+        status: Status,
+    }
+
     #[derive(Encode, Decode, Debug, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     enum Status {
@@ -42,13 +56,25 @@ pub mod evidence {
         Close,
     }
 
-    impl EvidenceNFT {
-        fn get_evidence(evidence: &EvidenceNFT) -> EvidenceNFT {
-            EvidenceNFT {
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Error {
+        EvidenceNotFound,
+    }
+
+    impl EvidenceNFTOutput {
+        fn get_evidence(
+            evidence_id: Id, 
+            case_title: Option<String>, 
+            evidence: &EvidenceNFT
+        ) -> EvidenceNFTOutput {
+            EvidenceNFTOutput {
+                evidence_id: evidence_id.clone(),
                 description: evidence.description.clone(),
                 owner: evidence.owner.clone(),
                 file: evidence.file.clone(),
                 case_id: evidence.case_id.clone(),
+                case_title: case_title.clone(),
                 status: evidence.status.clone(),
             }
         }
@@ -56,9 +82,10 @@ pub mod evidence {
 
     impl Evidence {
         #[ink(constructor, payable)]
-        pub fn new() -> Self {
+        pub fn new(case: CaseRef) -> Self {
             Self {
                 evidence: BTreeMap::new(),
+                case,
             }
         }
 
@@ -69,9 +96,29 @@ pub mod evidence {
         }
 
         #[ink(message)]
-        pub fn get_evidence_by_id(&self, evidence_id: EvidenceId) -> Option<EvidenceNFT> {
+        pub fn burn_evidence(&mut self, evidence_id: Id) -> Result<(), Error> {
+            if !self.evidence.contains_key(&evidence_id) {
+                return Err(Error::EvidenceNotFound)
+            };
+            self.evidence.remove(&evidence_id);
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn update_evidence(&mut self, evidence_id: Id, new_evidence: EvidenceNFT) -> Result<(), Error> {
+            let evidence = self
+                .evidence
+                .get_mut(&evidence_id)
+                .ok_or(Error::EvidenceNotFound)?;
+            *evidence = new_evidence;
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn get_evidence_by_id(&self, evidence_id: Id) -> Option<EvidenceNFTOutput> {
             if let Some(evidence) = self.evidence.get(&evidence_id) {
-                let evidence = EvidenceNFT::get_evidence(evidence);
+                let case_title = self.case.get_case_title(evidence.case_id);
+                let evidence = EvidenceNFTOutput::get_evidence(evidence_id, case_title, evidence);
                 Some(evidence)
             } else {
                 None
@@ -79,17 +126,37 @@ pub mod evidence {
         }
 
         #[ink(message)]
-        pub fn get_all_evidence(&self) -> Vec<EvidenceNFT> {
-            let evidence = self
+        pub fn get_all_evidence(&self) -> Vec<EvidenceNFTOutput> {
+            let evidence: Vec<EvidenceNFTOutput> = self
                 .evidence
                 .iter()
-                .map(|(_id, evidence)| EvidenceNFT::get_evidence(evidence))
+                .map(|(evidence_id, evidence)| {
+                    let case_title = self.case.get_case_title(evidence.case_id);
+                    EvidenceNFTOutput::get_evidence(*evidence_id, case_title, evidence)
+                })
                 .collect();
             evidence
         }
 
         #[ink(message)]
-        pub fn get_evidence_id(&self, evidence_id: EvidenceId) -> EvidenceId {
+        pub fn evidence_by_case_id(&self, case_id: Id) -> Vec<EvidenceNFTOutput> {
+            let evidence: Vec<EvidenceNFTOutput> = self
+                .evidence
+                .iter()
+                .filter_map(|(evidence_id, evidence)| {
+                    if case_id == evidence.case_id {
+                        let case_title = self.case.get_case_title(evidence.case_id);
+                        Some(EvidenceNFTOutput::get_evidence(*evidence_id, case_title, evidence))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            evidence
+        }
+
+        #[ink(message)]
+        pub fn get_evidence_id(&self, evidence_id: Id) -> Id {
             if self.evidence.get(&evidence_id).is_some() {
                 evidence_id
             } else {
