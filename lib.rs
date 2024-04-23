@@ -91,8 +91,12 @@ pub mod evidence {
 
         #[ink(message)]
         pub fn set_evidence(&mut self, evidence: EvidenceNFT) {
-            let length: Id = (self.evidence.len() as Id).checked_add(1).unwrap();
-            self.evidence.insert(length, evidence);
+            let last_evidence: &u32 = match self.evidence.last_key_value() {
+                Some(data) => data.0,
+                None => &0,
+            };
+            let last_id = last_evidence.checked_add(1).unwrap();
+            self.evidence.insert(last_id, evidence);
         }
 
         #[ink(message)]
