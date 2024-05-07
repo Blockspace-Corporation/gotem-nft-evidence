@@ -24,6 +24,7 @@ pub mod evidence {
     pub struct Evidence {
         pub evidence: BTreeMap<Id, EvidenceNFT>,
         pub case: CaseRef,
+        pub contract_owner: AccountId,
     }
 
     #[derive(Encode, Decode, Debug)]
@@ -82,10 +83,14 @@ pub mod evidence {
 
     impl Evidence {
         #[ink(constructor, payable)]
-        pub fn new(case: CaseRef) -> Self {
+        pub fn new(
+            case: CaseRef,
+            contract_owner: AccountId
+        ) -> Self {
             Self {
                 evidence: BTreeMap::new(),
                 case,
+                contract_owner,
             }
         }
 
